@@ -20,6 +20,10 @@ do
 			shift
 			OPT_CONFIGONLY=1
 			;;
+		"-l")
+			shift
+			OPT_LOCATIONS=1
+			;;
 		"-h")
 			shift
 			OPT_SHOWHELP=1
@@ -149,8 +153,63 @@ CLIENT_PRIVATE_KEY="$CLIENT_PRIVATE_KEY"
 # post-portforward hook
 # you can use \$PF_PORT for the received port numberr
 # PORTFORWARD_HOOK="my_program \$PF_PORT"
+
+# Uncomment to Prevent WireGuard from creating any routing tables
+# GEN_TABLE="true"
+
+# Enter Post/Pre Up/Down actions
+# PostUp=""
+# PostDown=""
+# PostUp=""
+# PreDown=""
+
+# Specify allowed IPs
+# ALLOWED_IP_LIST="0.0.0.0/0, ::/0"
+
+# Uncomment to generate config without PIA DNS
+# NO_DNS="true"
+
+# Use a custom config directory
+# CONFIGDIR="/etc/pia-wg"
+
 ENDCONFIG
 	echo "Config saved"
+fi
+
+if ! [ -z "$GEN_TABLE" ]
+then
+	TABLE="Table      = off"
+else
+	TABLE="DELETEME"
+fi
+if ! [ -z "$PostUp" ]
+then
+	POSTUP="PostUp     = $PostUp"
+else
+	POSTUP="DELETEME"
+fi
+if ! [ -z "$PostDown" ]
+then
+	POSTDOWN="PostDown   = $PostDown"
+else
+	POSTDOWN="DELETEME"
+fi
+if ! [ -z "$PreUp" ]
+then
+	PREUP="PreUp      = $PreUp"
+else
+	PREUP="DELETEME"
+fi
+if ! [ -z "$PreDown" ]
+then
+	PREDOWN="PreDown    = $PreDown"
+else
+	PREDOWN="DELETEME"
+fi
+
+if [ -z "$ALLOWED_IP_LIST" ]
+then
+	ALLOWED_IP_LIST="0.0.0.0/5, 8.0.0.0/7, 11.0.0.0/8, 12.0.0.0/6, 16.0.0.0/4, 32.0.0.0/3, 64.0.0.0/2, 128.0.0.0/3, 160.0.0.0/5, 168.0.0.0/6, 172.0.0.0/12, 172.32.0.0/11, 172.64.0.0/10, 172.128.0.0/9, 173.0.0.0/8, 174.0.0.0/7, 176.0.0.0/4, 192.0.0.0/9, 192.128.0.0/11, 192.160.0.0/13, 192.169.0.0/16, 192.170.0.0/15, 192.172.0.0/14, 192.176.0.0/12, 192.192.0.0/10, 193.0.0.0/8, 194.0.0.0/7, 196.0.0.0/6, 200.0.0.0/5, 208.0.0.0/4, ::/0"
 fi
 
 # fetch data-new.json if missing
@@ -179,6 +238,20 @@ then
 	rm "$CONNCACHE" "$REMOTEINFO" 2>/dev/null
 fi
 
+if [ -n "$OPT_LOCATIONS" ]
+then
+  echo "Options are:"
+	#jq '.regions | .[] | .id' "$DATAFILE_NEW" | sort | sed -e 's/^/ * /'
+  (
+          echo "${BOLD}Location${TAB}Region${TAB}Port Forward${TAB}Geolocated${NORMAL}"
+          echo "----------------${TAB}------------------${TAB}------------${TAB}----------"
+          jq -r '.regions | .[] | '${PORTFORWARD:+'| select(.port_forward)'}' [.id, .name, .port_forward, .geo] | "'$'\e''[1m\(.[0])'$'\e''[0m\t\(.[1])\t\(.[2])\t\(.[3])"' "$DATAFILE_NEW" | sort
+  ) | column -t -s "${TAB}"
+  echo "${PORTFORWARD:+'Note: only port-forwarding regions displayed'}"
+  echo "Please edit $CONFIG and change your desired location, then try again"
+  exit 0
+fi
+
 if [ -r "$CONNCACHE" ]
 then
 	WG_NAME="$(jq -r ".name" "$CONNCACHE")"
@@ -203,6 +276,9 @@ then
 		echo "Location $LOC not found!"
 		echo "Options are:"
 	# 	jq '.regions | .[] | .id' "$DATAFILE_NEW" | sort | sed -e 's/^/ * /'
+
+			echo "${BOLD}Location${TAB}Region${TAB}Port Forward${TAB}Geolocated${NORMAL}"
+			echo "----------------${TAB}------------------${TAB}------------${TAB}----------"
 		(
 			echo "${BOLD}Location${TAB}Region${TAB}Port Forward${TAB}Geolocated${NORMAL}"
 			echo "----------------${TAB}------------------${TAB}------------${TAB}----------"
@@ -384,18 +460,31 @@ SERVER_VIP="$(jq -r .server_vip "$REMOTEINFO")"
 
 if [ -n "$OPT_CONFIGONLY" ]
 then
+	if [ -z "$NO_DNS" ]
+	then
+		DNS="DNS        = $(jq -r '.dns_servers[0:2]' "$REMOTEINFO" | grep ^\  | cut -d\" -f2 | xargs echo | sed -e 's/ /,/g')"
+	else
+		DNS="DELETEME"
+	fi
 	cat > "$WGCONF" <<ENDWG
 	[Interface]
+	$TABLE
 	PrivateKey = $CLIENT_PRIVATE_KEY
 	Address    = $PEER_IP
-	DNS        = $(jq -r '.dns_servers[0:2]' "$REMOTEINFO" | grep ^\  | cut -d\" -f2 | xargs echo | sed -e 's/ /,/g')
+
+	$DNS
+	$POSTUP
+	$POSTDOWN
+	$PREUP
+	$PREDOWN
 
 	[Peer]
 	PublicKey  = $SERVER_PUBLIC_KEY
-	AllowedIPs = 0.0.0.0/5, 8.0.0.0/7, 11.0.0.0/8, 12.0.0.0/6, 16.0.0.0/4, 32.0.0.0/3, 64.0.0.0/2, 128.0.0.0/3, 160.0.0.0/5, 168.0.0.0/6, 172.0.0.0/12, 172.32.0.0/11, 172.64.0.0/10, 172.128.0.0/9, 173.0.0.0/8, 174.0.0.0/7, 176.0.0.0/4, 192.0.0.0/9, 192.128.0.0/11, 192.160.0.0/13, 192.169.0.0/16, 192.170.0.0/15, 192.172.0.0/14, 192.176.0.0/12, 192.192.0.0/10, 193.0.0.0/8, 194.0.0.0/7, 196.0.0.0/6, 200.0.0.0/5, 208.0.0.0/4, ::/0
+	AllowedIPs = $ALLOWED_IP_LIST
 	Endpoint   = $SERVER_IP:$SERVER_PORT
 ENDWG
 
+	sed -i '/DELETEME/d' "$WGCONF"
 	echo
 	echo "$WGCONF generated:"
 	echo
