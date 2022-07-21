@@ -147,17 +147,17 @@ CLIENT_PRIVATE_KEY="$CLIENT_PRIVATE_KEY"
 # HARDWARE_ROUTE_TABLE="hardlinks"
 
 # If you have daemons that you want to force to only use the VPN and already have a routing table for this purpose, specify it here
-# pia-wg will add a default route via the PIA VPN link to that table for you
+# pia-wg will add a default route via the PIA VPN link to that table for you.
 # VPNONLY_ROUTE_TABLE="vpnonly"
+
+# Uncomment to set a custom routing table.
+# TABLE="VPN"
 
 # post-portforward hook
 # you can use \$PF_PORT for the received port numberr
 # PORTFORWARD_HOOK="my_program \$PF_PORT"
 
-# Uncomment to Prevent WireGuard from creating any routing tables
-# GEN_TABLE="true"
-
-# Enter Post/Pre Up/Down actions
+# Enter Post/Pre Up/Down actions/scripts
 # PostUp=""
 # PostDown=""
 # PostUp=""
@@ -166,8 +166,8 @@ CLIENT_PRIVATE_KEY="$CLIENT_PRIVATE_KEY"
 # Specify allowed IPs
 # ALLOWED_IP_LIST="0.0.0.0/0, ::/0"
 
-# Uncomment to generate config without PIA DNS
-# NO_DNS="true"
+# Generate config with custom DNS, set to "DELETEME" for no DNS
+# DNS="DELETEME"
 
 # Use a custom config directory
 # CONFIGDIR="/etc/pia-wg"
@@ -176,35 +176,31 @@ ENDCONFIG
 	echo "Config saved"
 fi
 
-if ! [ -z "$GEN_TABLE" ]
+if ! [ -z "$TABLE" ]
 then
-	TABLE="Table      = off"
+	TABLE="$TABLE"
 else
 	TABLE="DELETEME"
 fi
-if ! [ -z "$PostUp" ]
+
+if [ -z "$PostUp" ]
 then
-	POSTUP="PostUp     = $PostUp"
-else
-	POSTUP="DELETEME"
+	PostUp="DELETEME"
 fi
-if ! [ -z "$PostDown" ]
+
+if [ -z "$PostDown" ]
 then
-	POSTDOWN="PostDown   = $PostDown"
-else
-	POSTDOWN="DELETEME"
+	PostDown="DELETEME"
 fi
-if ! [ -z "$PreUp" ]
+
+if [ -z "$PreUp" ]
 then
-	PREUP="PreUp      = $PreUp"
-else
-	PREUP="DELETEME"
+	PreUp="DELETEME"
 fi
-if ! [ -z "$PreDown" ]
+
+if [ -z "$PreDown" ]
 then
-	PREDOWN="PreDown    = $PreDown"
-else
-	PREDOWN="DELETEME"
+	PreDown="DELETEME"
 fi
 
 if [ -z "$ALLOWED_IP_LIST" ]
@@ -460,23 +456,23 @@ SERVER_VIP="$(jq -r .server_vip "$REMOTEINFO")"
 
 if [ -n "$OPT_CONFIGONLY" ]
 then
-	if [ -z "$NO_DNS" ]
+	if [ -z "$DNS" ]
 	then
-		DNS="DNS        = $(jq -r '.dns_servers[0:2]' "$REMOTEINFO" | grep ^\  | cut -d\" -f2 | xargs echo | sed -e 's/ /,/g')"
+		DNS="$(jq -r '.dns_servers[0:2]' "$REMOTEINFO" | grep ^\  | cut -d\" -f2 | xargs echo | sed -e 's/ /,/g')"
 	else
-		DNS="DELETEME"
+		DNS="$DNS"
 	fi
 	cat > "$WGCONF" <<ENDWG
 	[Interface]
-	$TABLE
+	Table      = $TABLE
 	PrivateKey = $CLIENT_PRIVATE_KEY
 	Address    = $PEER_IP
-
-	$DNS
-	$POSTUP
-	$POSTDOWN
-	$PREUP
-	$PREDOWN
+	DNS        = $DNS
+	
+	PostUp     = $PostUp
+	PostDown   = $PostDown
+	PreUp      = $PreUp
+	PreDown    = $PreDown
 
 	[Peer]
 	PublicKey  = $SERVER_PUBLIC_KEY
