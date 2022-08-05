@@ -79,6 +79,11 @@ then
 	EXIT2=1
 fi
 
+if [ -n "$OPT_RECONNECT" ]
+then
+	rm -v "$CONNCACHE" "$REMOTEINFO" "$DATAFILE" "$DATAFILE_NEW" "$PIA_CERT" "$TOKENFILE" 2>/dev/null
+fi
+
 if [ -z "$OPT_CONFIGONLY" ]
 then
 	if ! which ip &>/dev/null
@@ -227,11 +232,6 @@ if ! [ -r "$PIA_CERT" ]
 then
 	echo "Fetching PIA self-signed RSA certificate from github"
 	curl --max-time 15 'https://raw.githubusercontent.com/pia-foss/desktop/master/daemon/res/ca/rsa_4096.crt' > "$PIA_CERT" || exit 1
-fi
-
-if [ -n "$OPT_RECONNECT" ]
-then
-	rm "$CONNCACHE" "$REMOTEINFO" 2>/dev/null
 fi
 
 if [ -n "$OPT_LOCATIONS" ]
