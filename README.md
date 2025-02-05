@@ -7,7 +7,7 @@ This Python script automates the process of generating a WireGuard configuration
 - Fetches PIA authentication token using provided credentials.
 - Retrieves the list of available PIA regions and servers.
 - Generates WireGuard keys and registers them with the selected PIA server.
-- Creates a WireGuard configuration file on an isolated routing table with routing rules to avoid conflicts.
+- Creates a WireGuard configuration file on an **isolated routing table with routing rules to avoid conflicts**.
 - Supports command-line arguments for customization.
 
 ## Prerequisites
