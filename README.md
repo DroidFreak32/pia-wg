@@ -1,97 +1,120 @@
-# Private Internet Access wireguard shell scripts
+# PIA WireGuard Configuration Generator
 
-## Prelude
+This Python script automates the process of generating a WireGuard configuration file for Private Internet Access (PIA) VPN. It fetches the necessary credentials, selects a server in the preferred region, and generates a WireGuard configuration file.
 
-* [Private Internet Access (PIA)](https://privateinternetaccess.com) is a VPN provider that claims a strict interest in privacy and [does not log user traffic](https://www.privateinternetaccess.com/helpdesk/kb/articles/do-you-log-3).
+## Features
 
-* [WireGuard](https://wireguard.com) is a relatively new VPN protocol written by a consortium of Linux developers and cryptographers, designed to be small, simple, efficient, and avoid many of the pitfalls of other popular VPN protocols.
+- Fetches PIA authentication token using provided credentials.
+- Retrieves the list of available PIA regions and servers.
+- Generates WireGuard keys and registers them with the selected PIA server.
+- Creates a WireGuard configuration file on an isolated routing table with routing rules to avoid conflicts.
+- Supports command-line arguments for customization.
+
+## Prerequisites
+
+- Python 3.x
+- `requests` library
+- `prettytable` library
+- `wg` command-line tool (WireGuard)
+
+## Installation
+
+1. Clone the repository.
+2. Install the required Python libraries:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Ensure that the `wg` command-line tool is installed on your system.
 
 ## Usage
 
-These scripts have been tested on Gentoo Linux, but _should_ work with other Linux distributions.
+### Basic Usage
 
-They have not been tested on OSX but might work - pull requests are welcomed as long as they don't adversely affect the functionality on Linux, or excessively complicate the scripts.
+To generate a WireGuard configuration file with default settings:
 
-Windows is entirely out of scope for this project.
+```bash
+python pia_wg_config_generate.py -u <PIA_USER> -p <PIA_PASS>
+```
 
-### pia-wg
+### Command-Line Arguments
 
-`./pia-wg.sh [-r] [-c]`
+| Argument          | Description                                                                 |
+|-------------------|-----------------------------------------------------------------------------|
+| `-u`, `--piauser` | PIA account username (can also be set via `PIA_USER` environment variable). |
+| `-p`, `--piapass` | PIA account password (can also be set via `PIA_PASS` environment variable). |
+| `-r`, `--piaregion` | PIA region ID to connect to (default: 'sg' for Singapore).                |
+| `-w`, `--piawgconf` | Output path for WireGuard config (default: `pia_wg.conf` in $PWD).        |
+| `-d`, `--dumpregions` | Dump the current list of PIA regions and exit.                          |
+| `-v`, `--verbose` | Increase verbosity (`-v` for INFO, `-vv` for DEBUG).                        |
 
-* **-r** (reload/reconnect)<br>
-Hop to a new server or re-submit keys to selected server, even if a cached connection profile is available
-* **-c** (config only)<br>
-Only generate config, do not affect current system - useful for generating configs for routers and similar devices, or WireGuard's Android/iOS apps (if you don't like the PIA app)<br>
-The generated config will be stored at `~/.config/pia-wg/pia.conf` or `/var/cache/pia-wg/pia.conf` - where the filename is based on the `PIA_INTERFACE` value in your config (default "`pia`")<br>
-if `qrencode` is available, will also print a QR code to your terminal that can be scanned by the Wireguard mobile app.
-* **-f** (fast)<br>
-Fast reconnect - _only_ restore cached connection information, do _not_ actually try to contact anything on the internet.<br>
-Has no effect with **-r** or if cached connection information is not available.<br>
-Intended for use with startup scripts.<br>
+### Example
 
-During the first run, `pia-wg` will grab PIA's encryption key and initial server list, prompt for your PIA login credentials, and fetch an authentication token from PIA before proceeding to set up a wireguard connection.
+To generate a WireGuard configuration for a specific region and save it to a custom file:
 
-By default, it saves your settings in `~/.config/pia-wg/pia-wg.conf` (when run as user) or `/var/cache/pia-wg/pia-wg.conf` (when run as root or under `sudo`) - and saves other data (eg auth token, server list, cached connection, port-forward token, etc) in the same folder.
+```bash
+python pia_wg_config_generate.py -u <PIA_USER> -p <PIA_PASS> -r us -w custom_wg.conf
+```
 
-You can edit the config at any time, and examine other cached files in that folder.
+To get PIA credentials from [pass](https://www.passwordstore.org/) and generate a WireGuard config for Singapore region and save it to `/tmp/pia.conf`:
 
-`pia-wg` will attempt to automatically configure your routing tables and rules, but if you already have a suitable configuration, you can tell it which routing tables to use by setting `HARDWARE_ROUTE_TABLE` (table should only have hardlinks such as ethernet/wifi, wireguard packets are sent via this table) and/or `VPNONLY_ROUTE_TABLE` (table should be empty except for the PIA wireguard link, you can configure your system to force certain types of packets to use this table)
+```bash
+python3 pia_wg_config_generate.py -u $(pass vpn/pia/username) -p $(pass vpn/pia/pass) -r sg -w /tmp/pia.conf
+```
 
-After a successful connection, `pia-wg` will check if the cached serverlist is more than 3 days old, and if so, fetch a new list over the VPN connection.<br>
-In this way, this script never needs to fetch updates outside a VPN link after initial setup is complete.
+To list all available regions:
 
-It will also optionally call `pia-portforward.sh` if you have set PORTFORWARD="any text" in your `pia-wg.conf`.
+```bash
+python pia_wg_config_generate.py -d
+```
 
-If `pia-wg.sh` is run under a user account without the `-c` flag, it will (eventually) invoke `sudo` to apply various settings to your system.<br>
-Presumably `sudo` will request your user's password at this time depending on your `sudoers` configuration.
+## Environment Variables
 
-### pia-portforward
+The script can also be configured using environment variables:
 
-pia-portforward.sh is automatically run _once_ by `pia-wg` if you write `PORTFORWARD="any text"` in your pia-wg.conf - also, `pia-wg` will only select portforward-capable servers if this option is set.
+| Variable            | Description                                      | Default Value          |
+|---------------------|--------------------------------------------------|------------------------|
+| `PIA_USER`          | PIA account username.                            | None                   |
+| `PIA_PASS`          | PIA account password.                            | None                   |
+| `PIA_CA_CERT_PATH`  | Path to PIA CA certificate.                      | `ca.rsa.4096.crt` in `$PWD` |
+| `PIA_WG_CONF_FILE`  | Output path for WireGuard config.                | `pia_wg.conf` in `$PWD`  |
+| `PIA_REGION`        | Preferred region ID.                             | `sg` (Singapore)       |
+| `VERBOSE`           | Logging verbosity level (0=error, 1=info, 2=debug). | `0`                  |
 
-You can run it manually to check your port-forward status or find out which port you have assigned.
 
-If you want to maintain your forwarded port, it should be called every ~5 minutes - setting up a _cron job_ or similar to do this automatically is beyond the scope of this document.
+## Output
 
-### pia-check and pia-currentserver
+The script generates a WireGuard configuration file (`pia_wg.conf` by default) with the following structure:
 
-These are utility scripts - `pia-check.sh` will ping the remote endpoint over the VPN link to ensure it's still working, and `pia-currentserver` will print the cached connection information for the current or most recent connection.
+```ini
+[Interface]
+Address = <peer_ip>
+Table = 1337
+PrivateKey = <wg_pvtkey>
+PostUp = ip route add <Address> dev %i table <Table>
+PostUp = ip rule add from <Address> lookup <Table>
+PostDown = ip route del <Address> dev %i table <Table>
+PostDown = ip rule del from <Address> lookup <Table>
 
-### openrc-init-pia
+[Peer]
+PersistentKeepalive = 25
+PublicKey = <server_key>
+AllowedIPs = 0.0.0.0/0
+Endpoint = <server_ip>:<server_port>
+```
 
-This is an example openrc init script to start a PIA vpn connection during boot.
+## License
 
-It assigns the "reload" action to hop servers, demonstrating the ability to reuse a cached connection on boot but optionally hop servers at any time.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-### pia-config.sh
+## Contributing
 
-This script is intentionally non-executable, and does almost nothing if fed directly to bash - it may generate a wireguard key pair if you don't have one, but that's all.
+Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
 
-It is a utility script that provides a common place for the above scripts to share default config settings, and is only intended to be included from the executable scripts.
+## Acknowledgments
 
-## Requirements
+- [Private Internet Access (PIA)](https://www.privateinternetaccess.com/) for providing the VPN service.
+- [pia-foss](https://github.com/pia-foss) for providing bash script as a reference.
+- [WireGuard](https://www.wireguard.com/) for the VPN protocol.
 
-Standard Linux userland, with functioning `bash`, `which`, `realpath`, `grep`, `cut`, etc.
-
-Additionally, it will check for the presence of `curl`, `jq`, `ip` (iproute2), `wg` (wireguard-tools) and fail if they are absent.
-
-The `qrencode` utility is optional, but is called when `-c` is specified to print a QR code for the generated config.
-
-## Notes
-
-* [PIA have published their own shell scripts](https://github.com/pia-foss/manual-connections) with somewhat similar functionality, but a significantly different scope and target audience.<br>
-
-* These scripts are carefully designed to not need working DNS after the initial setup, since they were written for places where PIA is ostensibly blocked.<br>
-During initial setup in such places however, you may have to use an alternate connection method so that the auth token can be fetched from PIA's API, and the initial serverlist and PIA encryption key can be downloaded.
-
-* While these scripts are designed to have a robust quantity of automation and error checking, pull requests for improvements are always welcome.
-
-* The routing tables and rules are designed to gracefully handle connection changes (eg ethernet/wifi/mobile handover) since WireGuard itself is designed to gracefully handle this - however this requires your system to dynamically update the hardware-only routing table as required by adding new routes and removing stale ones.<br>
-Configuring your system to do this is beyond the scope of this document.
-
-* In [this comment](https://github.com/pia-foss/manual-connections/pull/111#issuecomment-822824399), PIA have stated that stale wireguard configs will be flushed within "several hours", so generated configs are of little utility on devices that aren't online 24/7.<br>
-Also, PIA's servers are rebooted periodically ("every few months"), and all wireguard configs will be lost at that time since the servers do not retain any state across reboots.
-
-* While empirical testing suggests that authentication tokens seem to last for many months at least, [PIA state in their own scripts](https://github.com/pia-foss/manual-connections/blob/742a492/get_token.sh#L94) that the authentication token only has a validity of 24 hours.<br>
-This could be related to fetching tokens from either their v2 or v3 API - this script prefers the v2 API, and will try v3 if v2 fails.<br>
-The documented token expiry schedule may make it necessary to store your unobfuscated PIA account password in the future.
